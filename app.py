@@ -1,155 +1,139 @@
+# app.py
 import streamlit as st
 import requests
+import os
 
-# ------------------------------------------------------------
-# CONFIG
-# ------------------------------------------------------------
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
 st.set_page_config(
     page_title="Health Insurance Premium Predictor",
     page_icon="🩺",
     layout="centered"
 )
 
-API_URL = st.secrets["MODEL_API_URL"]
+# --------------------------------------------------
+# ENV CONFIG (AZURE SAFE)
+# --------------------------------------------------
+API_URL = os.getenv("MODEL_API_URL")
 
-# ------------------------------------------------------------
+if not API_URL:
+    st.error("❌ MODEL_API_URL environment variable not set.")
+    st.stop()
+
+API_URL = API_URL.rstrip("/") + "/predict"
+
+# --------------------------------------------------
 # STYLES
-# ------------------------------------------------------------
+# --------------------------------------------------
 st.markdown("""
 <style>
-    .main { background-color: #0e1117; }
-    h1, h2, h3, h4 { color: #ffffff; }
-    label { color: #c9d1d9 !important; }
-    .stButton>button {
-        width: 100%;
-        border-radius: 12px;
-        height: 3.2em;
-        font-size: 18px;
-        background: linear-gradient(90deg, #238636, #2ea043);
-        color: white;
-        border: none;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(90deg, #2ea043, #238636);
-        color: white;
-    }
-    .result-box {
-        background: #161b22;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #30363d;
-        text-align: center;
-        font-size: 22px;
-        margin-top: 20px;
-    }
+.main { background-color: #0e1117; }
+h1, h2, h3 { color: #ffffff; }
+label { color: #c9d1d9 !important; }
+
+.stButton>button {
+    width: 100%;
+    border-radius: 12px;
+    height: 3.2em;
+    font-size: 18px;
+    background: linear-gradient(90deg, #238636, #2ea043);
+    color: white;
+    border: none;
+}
+
+.stButton>button:hover {
+    background: linear-gradient(90deg, #2ea043, #238636);
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------------------------------------
+# --------------------------------------------------
 # HEADER
-# ------------------------------------------------------------
-st.markdown("<h1 style='text-align:center;'>🩺 Health Insurance Premium Predictor</h1>", unsafe_allow_html=True)
-st.markdown(
-    "<p style='text-align:center; color:#8b949e;'>AI-powered premium estimation using live ML model</p>",
-    unsafe_allow_html=True
-)
+# --------------------------------------------------
+st.title("🩺 Health Insurance Premium Predictor")
+st.caption("AI-powered premium estimation • Secure • Cloud Deployed")
 
 st.divider()
 
-# ------------------------------------------------------------
-# INPUT FORM
-# ------------------------------------------------------------
-with st.form("prediction_form"):
-    st.subheader("👤 Personal Details")
+# --------------------------------------------------
+# INPUTS
+# --------------------------------------------------
+col1, col2 = st.columns(2)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        age = st.slider("🎂 Age", 18, 65, 30)
-        gender = st.selectbox("🚻 Gender", ["Male", "Female"])
-        marital_status = st.selectbox("💍 Marital Status", ["Married", "Unmarried"])
+with col1:
+    age = st.number_input("🎂 Age", 18, 100, 30)
+    dependants = st.number_input("👨‍👩‍👧 Dependants", 0, 10, 0)
+    income = st.number_input("💰 Annual Income (Lakhs)", 0, 200, 10)
+    genetical_risk = st.number_input("🧬 Genetic Risk Index", 0, 5, 1)
 
-    with col2:
-        dependants = st.slider("👨‍👩‍👧 Dependants", 0, 5, 0)
-        employment_status = st.selectbox("💼 Employment Status", ["Salaried", "Self-Employed", "Unemployed"])
-        income = st.slider("💰 Annual Income (Lakhs)", 1, 50, 10)
+with col2:
+    gender = st.selectbox("⚧ Gender", ["Male", "Female"])
+    marital_status = st.selectbox("💍 Marital Status", ["Married", "Unmarried"])
+    employment_status = st.selectbox("🏢 Employment", ["Salaried", "Self-Employed"])
+    bmi = st.selectbox("⚖️ BMI Category", ["Normal", "Overweight", "Obesity", "Underweight"])
 
-    st.subheader("🩻 Health & Lifestyle")
+st.subheader("🩺 Health & Policy Details")
 
-    col3, col4 = st.columns(2)
-    with col3:
-        bmi_category = st.selectbox("⚖️ BMI Category", ["Underweight", "Normal", "Overweight", "Obese"])
-        smoking = st.selectbox("🚬 Smoking Status", ["No", "Occasional", "Yes"])
+col3, col4 = st.columns(2)
 
-    with col4:
-        genetical_risk = st.selectbox("🧬 Genetic Risk", [0, 1])
-        medical_history = st.selectbox(
-            "🏥 Pre-Existing Condition",
-            ["None", "Diabetes", "Heart Disease", "Thyroid", "Hypertension"]
-        )
+with col3:
+    smoking = st.selectbox("🚬 Smoking Status", ["No", "Occasional", "Regular"])
+    medical_history = st.selectbox(
+        "📋 Pre-Existing Conditions",
+        [
+            "None",
+            "Diabetes",
+            "High blood pressure",
+            "Heart disease",
+            "Diabetes & High blood pressure",
+            "Diabetes & Heart disease",
+            "Thyroid",
+        ],
+    )
 
-    st.subheader("📍 Policy Details")
+with col4:
+    insurance_plan = st.selectbox("📄 Insurance Plan", ["Bronze", "Silver", "Gold"])
+    region = st.selectbox("🌍 Region", ["Northwest", "Southeast", "Southwest"])
 
-    col5, col6 = st.columns(2)
-    with col5:
-        insurance_plan = st.selectbox("📄 Insurance Plan", ["Silver", "Gold", "Platinum"])
-    with col6:
-        region = st.selectbox("🌍 Region", ["Northwest", "Southeast", "Southwest", "Northeast"])
+# --------------------------------------------------
+# PREDICTION
+# --------------------------------------------------
+st.divider()
 
-    submit = st.form_submit_button("🔮 Predict Premium")
-
-# ------------------------------------------------------------
-# API CALL
-# ------------------------------------------------------------
-if submit:
+if st.button("🔮 Predict Premium"):
     payload = {
-    "age": age,
-    "dependants": dependants,
-    "income": income,
-    "genetical_risk": genetical_risk,
-    "insurance_plan": insurance_plan,
-    "gender": gender,
-    "marital_status": marital_status,
-    "employment_status": employment_status,
-    "bmi": bmi_category,   # ✅ FIX HERE
-    "smoking": smoking,
-    "region": region,
-    "medical_history": medical_history
-}
+        "age": age,
+        "dependants": dependants,
+        "income": income,
+        "genetical_risk": genetical_risk,
+        "insurance_plan": insurance_plan,
+        "gender": gender,
+        "marital_status": marital_status,
+        "employment_status": employment_status,
+        "bmi": bmi,
+        "smoking": smoking,
+        "region": region,
+        "medical_history": medical_history,
+    }
 
+    try:
+        response = requests.post(API_URL, json=payload, timeout=15)
 
-    with st.spinner("⏳ Calculating premium..."):
-        try:
-            response = requests.post(
-                API_URL,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=15
-            )
+        if response.status_code == 200:
+            result = response.json()
+            premium = result["predicted_premium"]
+            st.success(f"💸 **Predicted Premium: ₹ {premium:,}**")
+        else:
+            st.error(f"❌ API Error ({response.status_code})")
 
-            if response.status_code == 200:
-                premium = response.json()["predicted_premium"]
-                st.markdown(
-                    f"""
-                    <div class="result-box">
-                        💸 <b>Estimated Annual Premium</b><br><br>
-                        <span style="font-size:30px; color:#2ea043;">₹ {premium:,}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.error("❌ API Error")
-                st.code(response.text)
+    except requests.exceptions.RequestException as e:
+        st.error("❌ Unable to connect to Model API")
+        st.code(str(e))
 
-        except requests.exceptions.RequestException as e:
-            st.error("🚫 Unable to connect to the Model API")
-            st.caption(str(e))
-
-# ------------------------------------------------------------
+# --------------------------------------------------
 # FOOTER
-# ------------------------------------------------------------
-st.divider()
-st.markdown(
-    "<p style='text-align:center; color:#8b949e;'>Built with ❤️ using Streamlit & FastAPI · Model served from Azure App Service</p>",
-    unsafe_allow_html=True
+# --------------------------------------------------
+st.caption(
+    "Built with ❤️ using Streamlit • Model served via Azure App Service (FastAPI)"
 )
